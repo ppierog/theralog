@@ -4,17 +4,18 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"theraLog/dataRepository/note"
 	"theraLog/dataRepository/patient"
 
 	"github.com/jmoiron/sqlx"
 )
 
 type DbTable interface {
-	patient.Patient
+	patient.Patient | note.Note
 }
 
 type DbOps interface {
-	*patient.Patient
+	*patient.Patient //| *note.Note
 
 	Insert() string
 	Update() string
@@ -27,11 +28,6 @@ type DbOps interface {
 
 type QryBuilder struct {
 	Qry string
-}
-
-// type InitializerType[T DbOps] func(T, *sql.Rows) error
-func DbOpsInitializer[T DbOps](t T, rows *sql.Rows) error {
-	return t.Init(rows)
 }
 
 func (qryBuilder *QryBuilder) SelectFrom(tableName string) *QryBuilder {
@@ -69,7 +65,7 @@ func FindBy[T DbTable,
 	}](handler *sqlx.DB, qry *QryBuilder) []T {
 
 	var ret []T
-	t := T{}
+	var t T
 
 	initializer := func(t PT, rows *sql.Rows) error {
 		return t.Init(rows)
@@ -108,17 +104,25 @@ func FindBy[T DbTable,
 
 }
 
-func FindByName[T DbOps](handler *sqlx.DB, name string, t T) {
+func FindByName[T DbTable, PT interface {
+	Init(rows *sql.Rows) error
+	TableName() string
+	*T
+}](handler *sqlx.DB, name string, t PT) {
 	qry := QryBuilder{}
 
-	ret := FindBy(handler, qry.WhereName(name))
+	ret := FindBy[T, PT](handler, qry.WhereName(name))
 	*t = ret[0]
 }
 
-func FindByRowId[T DbOps](handler *sqlx.DB, rowId int64, t T) {
+func FindByRowId[T DbTable, PT interface {
+	Init(rows *sql.Rows) error
+	TableName() string
+	*T
+}](handler *sqlx.DB, rowId int64, t PT) {
 	qry := QryBuilder{}
 
-	ret := FindBy(handler, qry.WhereRowId(rowId))
+	ret := FindBy[T, PT](handler, qry.WhereRowId(rowId))
 	*t = ret[0]
 }
 
@@ -137,7 +141,7 @@ func Insert[T DbOps](handler *sqlx.DB, obj T) {
 
 }
 
-func Exec[T DbOps](handler *sqlx.DB, qry *QryBuilder) {
+func Exec(handler *sqlx.DB, qry *QryBuilder) {
 
 	_, err := handler.Exec(qry.Qry)
 
@@ -156,17 +160,23 @@ func Update[T DbOps](handler *sqlx.DB, obj T) {
 
 func DeleteBy[T DbOps](handler *sqlx.DB, qry *QryBuilder, obj T) {
 
-	Exec(handler, qry)
+	mainQry := QryBuilder{}
+	mainQry.DeleteFrom(obj.TableName())
+	if qry != nil {
+		mainQry.Qry += qry.Qry
+	}
+
+	Exec(handler, &mainQry)
 	obj.SetRowId(-1)
 
 }
 
 func DeleteByName[T DbOps](handler *sqlx.DB, obj T) {
 	qry := QryBuilder{}
-	DeleteBy(handler, qry.DeleteFrom(obj.TableName()).WhereName(obj.GetName()), obj)
+	DeleteBy(handler, qry.WhereName(obj.GetName()), obj)
 }
 
 func DeleteByRowId[T DbOps](handler *sqlx.DB, obj T) {
 	qry := QryBuilder{}
-	DeleteBy(handler, qry.DeleteFrom(obj.TableName()).WhereRowId(obj.GetRowId()), obj)
+	DeleteBy(handler, qry.WhereRowId(obj.GetRowId()), obj)
 }

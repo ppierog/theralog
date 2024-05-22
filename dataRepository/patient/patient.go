@@ -51,6 +51,24 @@ func (p *Patient) Update() string {
 	return fmt.Sprintf(UPDATE_QRY, p.Name, p.Occupation, p.BirthYear, p.City, p.TelephoneNumber, p.RowId)
 }
 
-func Init(p *Patient, rows *sql.Rows) error {
-	return p.Init(rows)
+func Equal(p1 *Patient, p2 *Patient) bool {
+	if p1.Name != p2.Name {
+		return false
+	}
+	if p1.BirthYear != p2.BirthYear {
+		return false
+	}
+	if p1.City != p2.City {
+		return false
+	}
+	if p1.TelephoneNumber != p2.TelephoneNumber {
+		return false
+	}
+	if p1.RowId != p2.RowId {
+		return false
+	}
+	if p1.Occupation != p2.Occupation {
+		return false
+	}
+	return true
 }
