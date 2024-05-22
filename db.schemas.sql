@@ -12,8 +12,8 @@ CREATE TABLE User(
    last_name         TEXT     NOT NULL,
    email             TEXT,
    telephone_number  CHAR(12),
-   password_salt     CHAR(8)  NOT NULL,
-   password_sha256   TEXT     NOT_NULL,
+   salt              CHAR(8)  NOT NULL,
+   password          TEXT     NOT_NULL,
    pub_key           TEXT
 );
 

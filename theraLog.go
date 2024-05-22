@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"theraLog/restRouter"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -31,11 +34,15 @@ func main() {
 
 	err = db.Ping()
 	if err != nil {
-		fmt.Println("Could not ping DB : ", err)
-		return
+		log.Fatalf("Could not ping DB : %s", err)
+	}
+	err = godotenv.Load("test.env")
+	if err != nil {
+		log.Fatalf("Some error occured. Err: %s", err)
 	}
 
+	secret := os.Getenv("SECRET")
 	router := restRouter.RestRouter{}
-	router.Init(dbHandler).GetEngine().Run("localhost:8080")
+	router.Init(dbHandler, secret).GetEngine().Run("localhost:8080")
 
 }

@@ -29,8 +29,10 @@ func (InitialTestVevtor) Notes() []Note {
 func (InitialTestVevtor) Users() []User {
 	return []User{
 		{Name: "User", LastName: "1", Email: "briliantFakeUser@gmail.con",
-			TelephoneNumber: "+486111111111", PasswordSalt: "DeadBeef", PasswordSha: "", PubKey: ""},
+			TelephoneNumber: "+486111111111", Salt: "447f44a4", PubKey: "",
+			Password: "b1ecb61a0c76f7bbb253d80c6d610818ceb2cdfbc16b923036a93a61229d426e"}, // aslk12
 	}
+
 }
 
 func (InitialTestVevtor) Manifests() []PatientManifest {

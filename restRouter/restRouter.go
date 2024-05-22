@@ -3,12 +3,14 @@ package restRouter
 import (
 	"database/sql"
 	"log"
-	"theraLog/dataRepository/dataModel"
-	"theraLog/dataRepository/dbLayer"
-
 	"net/http"
 	"strconv"
+	"theraLog/cred"
+	"theraLog/dataRepository/dataModel"
+	"theraLog/dataRepository/dbLayer"
+	"time"
 
+	"github.com/golang-jwt/jwt"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 
@@ -28,6 +30,7 @@ const manifestsByIdURL = "/manifests/:id"
 type RestRouter struct {
 	dbHandler *sqlx.DB
 	engine    *gin.Engine
+	secret    string
 }
 
 func getObjects[T dbLayer.DbTable, PT interface {
@@ -56,11 +59,14 @@ func getObjectById[T dbLayer.DbTable, PT interface {
 	}
 }
 
-func postObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
+func postObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T, prepare func(t T)) {
 
 	if err := c.BindJSON(t); err != nil {
 		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
 		return
+	}
+	if prepare != nil {
+		prepare(t)
 	}
 	dbLayer.Insert(dbHandler, t)
 }
@@ -165,6 +171,43 @@ func (r *RestRouter) getApi(c *gin.Context) {
 
 }
 
+func (r *RestRouter) login(c *gin.Context) {
+	creditionals := dataModel.UserCred{}
+
+	if err := c.BindJSON(&creditionals); err != nil {
+		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
+		return
+	}
+
+	qry := dbLayer.QryBuilder{}
+	users := dbLayer.FindBy[dataModel.User](r.dbHandler, qry.Where("email").Is(creditionals.Email))
+	if len(users) != 1 {
+		c.JSON(404, gin.H{"code": "NOT_FOUND", "message": "Could not login"})
+		return
+	}
+
+	user := users[0]
+	saltedPasswdSha256 := cred.CalcSha256(creditionals.Password, user.Salt)
+	if saltedPasswdSha256 != user.Password {
+		c.JSON(404, gin.H{"code": "NOT_FOUND", "message": "Could not login"})
+		return
+
+	}
+
+	tokenRepo := cred.TokenRepository{Secret: r.secret}
+	jwt, err := tokenRepo.NewAccessToken(cred.UserClaims{Login: creditionals.Email, StandardClaims: jwt.StandardClaims{
+		IssuedAt:  time.Now().Unix(),
+		ExpiresAt: time.Now().Add(time.Minute * 15).Unix(),
+	}})
+
+	if err != nil {
+		c.JSON(500, gin.H{"code": "Internal Server Error", "message": "Could not generate token"})
+		return
+	}
+	c.IndentedJSON(http.StatusOK, cred.Token{Jwt: jwt})
+
+}
+
 func (r *RestRouter) getPatients(c *gin.Context) {
 	getObjects[dataModel.Patient](r.dbHandler, c)
 }
@@ -175,7 +218,7 @@ func (r *RestRouter) getPatientById(c *gin.Context) {
 
 func (r *RestRouter) postPatient(c *gin.Context) {
 	newPatient := dataModel.Patient{}
-	postObject(r.dbHandler, c, &newPatient)
+	postObject(r.dbHandler, c, &newPatient, nil)
 }
 
 func (r *RestRouter) deletePatient(c *gin.Context) {
@@ -196,7 +239,7 @@ func (r *RestRouter) getNoteById(c *gin.Context) {
 
 func (r *RestRouter) postNote(c *gin.Context) {
 	newNote := dataModel.Note{}
-	postObject(r.dbHandler, c, &newNote)
+	postObject(r.dbHandler, c, &newNote, nil)
 }
 func (r *RestRouter) deleteNote(c *gin.Context) {
 	deleteObject(r.dbHandler, c, &dataModel.Note{})
@@ -216,7 +259,11 @@ func (r *RestRouter) getUserById(c *gin.Context) {
 
 func (r *RestRouter) postUser(c *gin.Context) {
 	newUser := dataModel.User{}
-	postObject(r.dbHandler, c, &newUser)
+	postObject(r.dbHandler, c, &newUser, func(user *dataModel.User) {
+		user.Salt = cred.GenerateSalt()
+		saltedPasswdSha256 := cred.CalcSha256(user.Password, user.Salt)
+		user.Password = saltedPasswdSha256
+	})
 }
 
 func (r *RestRouter) deleteUser(c *gin.Context) {
@@ -237,7 +284,7 @@ func (r *RestRouter) getManifestById(c *gin.Context) {
 
 func (r *RestRouter) postManifest(c *gin.Context) {
 	newUser := dataModel.PatientManifest{}
-	postObject(r.dbHandler, c, &newUser)
+	postObject(r.dbHandler, c, &newUser, nil)
 }
 
 func (r *RestRouter) deleteManifest(c *gin.Context) {
@@ -252,14 +299,17 @@ func (r *RestRouter) GetEngine() *gin.Engine {
 	return r.engine
 }
 
-func (r *RestRouter) Init(dbHandler *sqlx.DB) *RestRouter {
+func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 	r.dbHandler = dbHandler
+	r.secret = secret
 
 	//https: //go.dev/doc/tutorial/web-service-gin
 	r.engine = gin.Default()
 	r.engine.POST("/reset", r.resetDB)
 	r.engine.POST("/init", r.initDB)
 	r.engine.GET("api", r.getApi)
+
+	r.engine.POST("/login", r.login)
 
 	r.engine.GET(patientsURL, r.getPatients)
 	r.engine.GET(patientsByIdURL, r.getPatientById)

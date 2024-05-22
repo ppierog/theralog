@@ -50,6 +50,16 @@ func (qryBuilder *QryBuilder) WhereName(name string) *QryBuilder {
 	return qryBuilder
 }
 
+func (qryBuilder *QryBuilder) Where(name string) *QryBuilder {
+	qryBuilder.Qry = fmt.Sprintf("%s WHERE %s ", qryBuilder.Qry, name)
+	return qryBuilder
+}
+
+func (qryBuilder *QryBuilder) Is(name string) *QryBuilder {
+	qryBuilder.Qry = fmt.Sprintf("%s = '%s'", qryBuilder.Qry, name)
+	return qryBuilder
+}
+
 func (qryBuilder *QryBuilder) WhereRowId(rowId int64) *QryBuilder {
 	qryBuilder.Qry = fmt.Sprintf("%s WHERE rowid = %d ", qryBuilder.Qry, rowId)
 	return qryBuilder
