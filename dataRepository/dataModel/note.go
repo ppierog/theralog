@@ -1,4 +1,4 @@
-package note
+package dataModel
 
 import (
 	"database/sql"

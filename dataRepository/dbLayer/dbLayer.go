@@ -4,18 +4,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"theraLog/dataRepository/note"
-	"theraLog/dataRepository/patient"
+	"theraLog/dataRepository/dataModel"
 
 	"github.com/jmoiron/sqlx"
 )
 
 type DbTable interface {
-	patient.Patient | note.Note
+	dataModel.Patient | dataModel.Note
 }
 
 type DbOps interface {
-	*patient.Patient | *note.Note
+	*dataModel.Patient | *dataModel.Note
 
 	Insert() string
 	Update() string
