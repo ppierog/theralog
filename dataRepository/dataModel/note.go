@@ -49,5 +49,5 @@ func (p *Note) Insert() string {
 }
 
 func (p *Note) Update() string {
-	return ""
+	panic("Not Implemented")
 }

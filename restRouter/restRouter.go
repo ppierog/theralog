@@ -22,6 +22,8 @@ const notesURL = "/notes"
 const notesByIdURL = "/notes/:id"
 const usersURL = "/users"
 const usersByIdURL = "/users/:id"
+const manifestsURL = "/manifests"
+const manifestsByIdURL = "/manifests/:id"
 
 type RestRouter struct {
 	dbHandler *sqlx.DB
@@ -75,25 +77,31 @@ func (r *RestRouter) resetDB(c *gin.Context) {
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.Patient{})
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.Note{})
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.User{})
+	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.PatientManifest{})
 }
 
 func (r *RestRouter) initDB(c *gin.Context) {
 	testData := dataModel.InitialTestVevtor{}
 
-	pateintsTestVector := testData.Patients()
+	patientsTestVector := testData.Patients()
 	notesTestVector := testData.Notes()
 	userTestVector := testData.Users()
+	manifestsTestVector := testData.Manifests()
 
-	for i := 0; i < len(pateintsTestVector); i++ {
-		dbLayer.Insert(r.dbHandler, &pateintsTestVector[i])
+	for _, patient := range patientsTestVector {
+		dbLayer.Insert(r.dbHandler, &patient)
 	}
 
-	for i := 0; i < len(notesTestVector); i++ {
-		dbLayer.Insert(r.dbHandler, &notesTestVector[i])
+	for _, note := range notesTestVector {
+		dbLayer.Insert(r.dbHandler, &note)
 	}
 
 	for _, user := range userTestVector {
 		dbLayer.Insert(r.dbHandler, &user)
+	}
+
+	for _, manifest := range manifestsTestVector {
+		dbLayer.Insert(r.dbHandler, &manifest)
 	}
 }
 
@@ -137,6 +145,11 @@ func (r *RestRouter) getApi(c *gin.Context) {
 	AddOperation(&reflector, new(idReq), new(dataModel.User), http.MethodGet, usersURL+"/{id}")
 	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, usersURL)
 	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, usersURL+"/{id}")
+
+	AddOperation[blankReq](&reflector, nil, new([]dataModel.PatientManifest), http.MethodGet, manifestsURL)
+	AddOperation(&reflector, new(idReq), new(dataModel.PatientManifest), http.MethodGet, manifestsURL+"/{id}")
+	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, manifestsURL)
+	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, manifestsURL+"/{id}")
 
 	schema, err := reflector.Spec.MarshalYAML()
 	if err != nil {
@@ -199,6 +212,23 @@ func (r *RestRouter) deleteUser(c *gin.Context) {
 	deleteObject(r.dbHandler, c, &dataModel.User{})
 }
 
+func (r *RestRouter) getManifests(c *gin.Context) {
+	getObjects[dataModel.PatientManifest](r.dbHandler, c)
+}
+
+func (r *RestRouter) getManifestById(c *gin.Context) {
+	getObjectById[dataModel.PatientManifest](r.dbHandler, c)
+}
+
+func (r *RestRouter) postManifest(c *gin.Context) {
+	newUser := dataModel.PatientManifest{}
+	postObject(r.dbHandler, c, &newUser)
+}
+
+func (r *RestRouter) deleteManifest(c *gin.Context) {
+	deleteObject(r.dbHandler, c, &dataModel.PatientManifest{})
+}
+
 func (r *RestRouter) GetEngine() *gin.Engine {
 	return r.engine
 }
@@ -226,6 +256,11 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB) *RestRouter {
 	r.engine.GET(usersByIdURL, r.getUserById)
 	r.engine.POST(usersURL, r.postUser)
 	r.engine.DELETE(usersByIdURL, r.deleteUser)
+
+	r.engine.GET(manifestsURL, r.getManifests)
+	r.engine.GET(manifestsByIdURL, r.getManifestById)
+	r.engine.POST(manifestsURL, r.postManifest)
+	r.engine.DELETE(manifestsByIdURL, r.deleteManifest)
 
 	return r
 

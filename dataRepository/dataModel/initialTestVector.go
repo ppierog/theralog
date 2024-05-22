@@ -35,5 +35,12 @@ func (InitialTestVevtor) Users() []User {
 		{Name: "User", LastName: "1", Email: "briliantFakeUser@gmail.con",
 			TelephoneNumber: "+486111111111", PasswordSalt: "DeadBeef", PasswordSha: "", PubKey: ""},
 	}
+}
+
+func (InitialTestVevtor) Manifests() []PatientManifest {
+
+	return []PatientManifest{
+		{PatientId: 1, UserId: 1, CrudMask: 0x7, EncryptedAes: "test"},
+	}
 
 }

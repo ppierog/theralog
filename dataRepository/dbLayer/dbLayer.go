@@ -10,11 +10,11 @@ import (
 )
 
 type DbTable interface {
-	dataModel.Patient | dataModel.Note | dataModel.User
+	dataModel.Patient | dataModel.Note | dataModel.User | dataModel.PatientManifest
 }
 
 type DbOps interface {
-	*dataModel.Patient | *dataModel.Note | *dataModel.User
+	*dataModel.Patient | *dataModel.Note | *dataModel.User | *dataModel.PatientManifest
 
 	Insert() string
 	Update() string

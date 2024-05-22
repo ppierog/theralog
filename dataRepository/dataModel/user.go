@@ -50,5 +50,5 @@ func (p *User) Insert() string {
 }
 
 func (p *User) Update() string {
-	return ""
+	panic("Not Implemented")
 }
