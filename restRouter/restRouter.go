@@ -478,8 +478,8 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 	r.engine.DELETE(patientsByIdURL, r.deletePatient)
 	r.engine.PUT(patientsByIdURL, r.putPatient)
 
+	r.engine.GET(notesURL, r.getNotes)
 	r.engine.POST(notesByIdUploadURL, r.uploadNote)
-
 	r.engine.DELETE(notesByIdURL, r.deleteNote)
 	r.engine.PUT(notesByIdURL, r.putNote)
 
