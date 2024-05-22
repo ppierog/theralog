@@ -1,6 +1,8 @@
 package dbLayer
 
 import (
+	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -62,34 +64,58 @@ func TestPing(t *testing.T) {
 		t.Fatalf("Could not ping DB err %s: ", err)
 	}
 }
-func TestNoObjects(t *testing.T) {
-	patients := FindBy[dataModel.Patient](dbHandler, QryBuilder{}.Get())
-	notes := FindBy[dataModel.Note](dbHandler, QryBuilder{}.Get())
 
-	if len(patients) != 0 {
+func testNoObject[T DbTable, PT interface {
+	Init(rows *sql.Rows) error
+	TableName() string
+	*T
+}](t *testing.T) {
+	objects := FindBy[T, PT](dbHandler, QryBuilder{}.Get())
+	if len(objects) != 0 {
 		t.Fatalf("Wrong DB initial state")
 	}
-	if len(notes) != 0 {
-		t.Fatalf("Wrong DB initial state")
-	}
-	var patient dataModel.Patient
-
-	if FindByName(dbHandler, "Patient 1", &patient) {
-		t.Fatalf("Found by name")
-	}
-	if FindByRowId(dbHandler, 1, &patient) {
-		t.Fatalf("Found by rowId")
-	}
-	var note dataModel.Note
-
-	if FindByName(dbHandler, "Note 1", &note) {
-		t.Fatalf("Found by name")
-	}
-	if FindByRowId(dbHandler, 1, &note) {
-		t.Fatalf("Found by rowId")
-	}
-
 }
+
+func testNoObjectByName[T DbTable, PT interface {
+	Init(rows *sql.Rows) error
+	TableName() string
+	*T
+}](b *testing.B, prefix string) {
+	var obj T
+	if FindByName[T, PT](dbHandler, prefix, &obj) {
+		b.Fatalf("Wrong DB initial state")
+	}
+}
+
+func testNoObjectByRowId[T DbTable, PT interface {
+	Init(rows *sql.Rows) error
+	TableName() string
+	*T
+}](b *testing.B, id int64) {
+	var obj T
+	if FindByRowId[T, PT](dbHandler, id, &obj) {
+		b.Fatalf("Wrong DB initial state")
+	}
+}
+
+func TestNoObjects(t *testing.T) {
+	testNoObject[dataModel.Patient](t)
+	testNoObject[dataModel.Note](t)
+	testNoObject[dataModel.User](t)
+	testNoObject[dataModel.PatientManifest](t)
+}
+func BenchmarkNoObjects(b *testing.B) {
+
+	for i := 0; i < b.N; i++ {
+		testNoObjectByName[dataModel.Patient](b, fmt.Sprintf("Patient %d", i))
+		testNoObjectByName[dataModel.Note](b, fmt.Sprintf("Note %d", i))
+		testNoObjectByName[dataModel.User](b, fmt.Sprintf("User %d", i))
+		testNoObjectByRowId[dataModel.Patient](b, int64(i))
+		testNoObjectByRowId[dataModel.Note](b, int64(i))
+		testNoObjectByRowId[dataModel.User](b, int64(i))
+	}
+}
+
 func TestPatients(t *testing.T) {
 	patients := FindBy[dataModel.Patient](dbHandler, QryBuilder{}.Get())
 
