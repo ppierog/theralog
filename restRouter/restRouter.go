@@ -2,6 +2,7 @@ package restRouter
 
 import (
 	"database/sql"
+	"log"
 	"theraLog/dataRepository/dataModel"
 	"theraLog/dataRepository/dbLayer"
 
@@ -12,7 +13,15 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/gin-gonic/gin"
+	"github.com/swaggest/openapi-go/openapi3"
 )
+
+const patientsURL = "/patients"
+const patientsByIdURL = "/patients/:id"
+const notesURL = "/notes"
+const notesByIdURL = "/notes/:id"
+const usersURL = "/users"
+const usersByIdURL = "/users/:id"
 
 type RestRouter struct {
 	dbHandler *sqlx.DB
@@ -88,6 +97,58 @@ func (r *RestRouter) initDB(c *gin.Context) {
 	}
 }
 
+func AddOperation[REQ any, RES any](reflector *openapi3.Reflector, req *REQ, res *RES, method string, url string) {
+	op := openapi3.Operation{}
+	reflector.SetRequest(&op, req, method)
+	reflector.SetJSONResponse(&op, new(RES), http.StatusOK)
+	reflector.Spec.AddOperation(method, url, op)
+}
+
+func (r *RestRouter) getApi(c *gin.Context) {
+	reflector := openapi3.Reflector{}
+	reflector.Spec = &openapi3.Spec{Openapi: "3.0.3"}
+	reflector.Spec.Info.
+		WithTitle("TheraLog Api").
+		WithVersion("1.00").
+		WithDescription("TheraLog Api description")
+
+	type blankReq struct{}
+	type blankRes struct{}
+
+	type idReq struct {
+		ID string `path:"id" example:"1"`
+	}
+
+	type patientsResp struct {
+		patients []dataModel.Patient
+	}
+
+	AddOperation[blankReq](&reflector, nil, new([]dataModel.Patient), http.MethodGet, patientsURL)
+	AddOperation(&reflector, new(idReq), new(dataModel.Patient), http.MethodGet, patientsURL+"/{id}")
+	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, patientsURL)
+	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, patientsURL+"/{id}")
+
+	AddOperation[blankReq](&reflector, nil, new([]dataModel.Note), http.MethodGet, notesURL)
+	AddOperation(&reflector, new(idReq), new(dataModel.Note), http.MethodGet, notesURL+"/{id}")
+	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, notesURL)
+	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, notesURL+"/{id}")
+
+	AddOperation[blankReq](&reflector, nil, new([]dataModel.User), http.MethodGet, usersURL)
+	AddOperation(&reflector, new(idReq), new(dataModel.User), http.MethodGet, usersURL+"/{id}")
+	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, usersURL)
+	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, usersURL+"/{id}")
+
+	schema, err := reflector.Spec.MarshalYAML()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	s := string(schema)
+
+	c.String(200, s)
+
+}
+
 func (r *RestRouter) getPatients(c *gin.Context) {
 	getObjects[dataModel.Patient](r.dbHandler, c)
 }
@@ -145,17 +206,11 @@ func (r *RestRouter) GetEngine() *gin.Engine {
 func (r *RestRouter) Init(dbHandler *sqlx.DB) *RestRouter {
 	r.dbHandler = dbHandler
 
-	const patientsURL = "/patients"
-	const patientsByIdURL = "/patients/:id"
-	const notesURL = "/notes"
-	const notesByIdURL = "/notes/:id"
-	const usersURL = "/users"
-	const usersByIdURL = "/users/:id"
-
 	//https: //go.dev/doc/tutorial/web-service-gin
 	r.engine = gin.Default()
 	r.engine.POST("/reset", r.resetDB)
 	r.engine.POST("/init", r.initDB)
+	r.engine.GET("api", r.getApi)
 
 	r.engine.GET(patientsURL, r.getPatients)
 	r.engine.GET(patientsByIdURL, r.getPatientById)
