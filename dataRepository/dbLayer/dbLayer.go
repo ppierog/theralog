@@ -13,6 +13,15 @@ type DbTable interface {
 	dataModel.Patient | dataModel.Note | dataModel.User | dataModel.PatientManifest
 }
 
+type DbObjectWrapper[T DbTable] struct {
+	Data T
+	Err  error
+}
+
+func NewDbObjectWrapper[T DbTable](data T, err error) DbObjectWrapper[T] {
+	return DbObjectWrapper[T]{Data: data, Err: err}
+}
+
 type DbOps interface {
 	*dataModel.Patient | *dataModel.Note | *dataModel.User | *dataModel.PatientManifest
 

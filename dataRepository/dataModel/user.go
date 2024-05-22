@@ -23,6 +23,10 @@ type UserCred struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type UserToken struct {
+	Token string `json:"token" binding:"required"`
+}
+
 const UserTableName string = "User"
 
 func (p *User) TableName() string {

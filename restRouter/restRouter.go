@@ -2,6 +2,7 @@ package restRouter
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,6 +21,10 @@ import (
 	"github.com/swaggest/openapi-go/openapi3"
 )
 
+const loginURL = "/login"
+const apiURL = "/api"
+const resetURL = "/reset"
+const initURL = "/init"
 const patientsURL = "/patients"
 const patientsByIdURL = "/patients/:id"
 const notesURL = "/notes"
@@ -37,36 +42,63 @@ type RestRouter struct {
 	secret    string
 }
 
+func toJson[T dbLayer.DbTable](c *gin.Context, o dbLayer.DbObjectWrapper[T]) {
+	if o.Err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": "PAGE_NOT_FOUND", "message": o.Err})
+	} else {
+		c.IndentedJSON(http.StatusOK, o.Data)
+	}
+}
+
 func getObjects[T dbLayer.DbTable, PT interface {
 	Init(rows *sql.Rows) error
 	TableName() string
 	*T
-}](dbHandler *sqlx.DB, c *gin.Context) {
+}](dbHandler *sqlx.DB, filter func(T) bool, modifier func(*T)) []T {
 	objects := dbLayer.FindBy[T, PT](dbHandler, nil)
-	c.IndentedJSON(http.StatusOK, objects)
+	ret := []T{}
+	if filter != nil {
+		for _, o := range objects {
+			if filter(o) {
+				ret = append(ret, o)
+			}
+		}
+	} else {
+		ret = objects
+	}
+
+	if modifier != nil {
+		for i := 0; i < len(ret); i++ {
+			modifier(&ret[i])
+		}
+	}
+
+	return ret
 }
 
 func getObjectById[T dbLayer.DbTable, PT interface {
 	Init(rows *sql.Rows) error
 	TableName() string
 	*T
-}](dbHandler *sqlx.DB, c *gin.Context) {
+}](dbHandler *sqlx.DB, c *gin.Context, modifier func(*T)) (T, error) {
 
 	id := c.Param("id")
 	rowId, _ := strconv.ParseInt(id, 10, 64)
 	var object T
 	if dbLayer.FindByRowId[T, PT](dbHandler, rowId, &object) {
-		c.IndentedJSON(http.StatusOK, object)
+		if modifier != nil {
+			modifier(&object)
+		}
+		return object, nil
 	} else {
-		c.JSON(404, gin.H{"code": "PAGE_NOT_FOUND", "message": "Object not found"})
-
+		return object, errors.New("Object Not found")
 	}
 }
 
 func postObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T, prepare func(t T)) {
 
 	if err := c.BindJSON(t); err != nil {
-		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
 		return
 	}
 	if prepare != nil {
@@ -80,14 +112,14 @@ func deleteObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
 	rowId, _ := strconv.ParseInt(id, 10, 64)
 	t.SetRowId(rowId)
 	if 0 == dbLayer.DeleteByRowId(dbHandler, t) {
-		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not delete object"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not delete object"})
 	}
 }
 
 func putObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
 
 	if err := c.BindJSON(t); err != nil {
-		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
 		return
 	}
 	id := c.Param("id")
@@ -102,6 +134,14 @@ func (r *RestRouter) resetDB(c *gin.Context) {
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.Note{})
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.User{})
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.PatientManifest{})
+	if err := os.RemoveAll(appdataPath); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := os.Mkdir(appdataPath, os.ModePerm); err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 func (r *RestRouter) initDB(c *gin.Context) {
@@ -138,6 +178,7 @@ type idReqWithContent[T any] struct {
 
 func AddOperation[REQ any, RES any](reflector *openapi3.Reflector, req *REQ, res *RES, method string, url string) {
 	op := openapi3.Operation{}
+
 	reflector.SetRequest(&op, req, method)
 	reflector.SetJSONResponse(&op, new(RES), http.StatusOK)
 	reflector.Spec.AddOperation(method, url, op)
@@ -156,8 +197,15 @@ func (r *RestRouter) getApi(c *gin.Context) {
 	reflector.Spec = &openapi3.Spec{Openapi: "3.0.3"}
 	reflector.Spec.Info.
 		WithTitle("TheraLog Api").
-		WithVersion("1.00").
+		WithVersion("1.05").
 		WithDescription("TheraLog Api description")
+
+	op := openapi3.Operation{}
+	reflector.Spec.AddOperation(http.MethodGet, apiURL, *op.WithDescription("Get YAML description of API"))
+
+	AddOperation(&reflector, &dataModel.UserCred{}, &dataModel.UserToken{}, http.MethodPost, loginURL)
+	reflector.Spec.AddOperation(http.MethodPost, resetURL, *op.WithDescription("Reset System to initial state"))
+	reflector.Spec.AddOperation(http.MethodPost, initURL, *op.WithDescription("Init  System with default values"))
 
 	AddOperations[dataModel.Patient](&reflector, patientsURL)
 	AddOperations[dataModel.Note](&reflector, notesURL)
@@ -179,21 +227,20 @@ func (r *RestRouter) login(c *gin.Context) {
 	creditionals := dataModel.UserCred{}
 
 	if err := c.BindJSON(&creditionals); err != nil {
-		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
 		return
 	}
 
 	qry := dbLayer.QryBuilder{}
 	users := dbLayer.FindBy[dataModel.User](r.dbHandler, qry.Where("email").Is(creditionals.Email))
 	if len(users) != 1 {
-		c.JSON(404, gin.H{"code": "NOT_FOUND", "message": "Could not login"})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "NOT_FOUND", "message": "Could not login"})
 		return
 	}
-
 	user := users[0]
 	saltedPasswdSha256 := cred.CalcSha256(creditionals.Password, user.Salt)
 	if saltedPasswdSha256 != user.Password {
-		c.JSON(404, gin.H{"code": "NOT_FOUND", "message": "Could not login"})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "Could not login"})
 		return
 
 	}
@@ -214,20 +261,21 @@ func (r *RestRouter) login(c *gin.Context) {
 func (r *RestRouter) checkToken() gin.HandlerFunc {
 
 	return func(c *gin.Context) {
+		url := c.Request.URL.String()
 
-		if c.Request.URL.String() == "/login" {
+		if url == loginURL || url == apiURL {
 			c.Next()
 		} else {
 			token := c.Request.Header.Get("token")
 			tokenRepo := cred.TokenRepository{Secret: r.secret}
 			user := tokenRepo.ParseAccessToken(token)
 			if user == nil {
-				c.AbortWithStatusJSON(401, gin.H{"error": "No Auth token in header request"})
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "No Auth token in header request"})
 				return
 			}
 			currTime := time.Now().Unix()
 			if user.ExpiresAt <= currTime {
-				c.AbortWithStatusJSON(401, gin.H{"error": "Token already expired : " + time.Unix(user.ExpiresAt, 0).String()})
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token already expired : " + time.Unix(user.ExpiresAt, 0).String()})
 				return
 			}
 			// Set example variable
@@ -240,11 +288,13 @@ func (r *RestRouter) checkToken() gin.HandlerFunc {
 }
 
 func (r *RestRouter) getPatients(c *gin.Context) {
-	getObjects[dataModel.Patient](r.dbHandler, c)
+	objects := getObjects[dataModel.Patient](r.dbHandler, nil, nil)
+	c.IndentedJSON(http.StatusOK, objects)
 }
 
 func (r *RestRouter) getPatientById(c *gin.Context) {
-	getObjectById[dataModel.Patient](r.dbHandler, c)
+	object := dbLayer.NewDbObjectWrapper(getObjectById[dataModel.Patient](r.dbHandler, c, nil))
+	toJson(c, object)
 }
 
 func (r *RestRouter) postPatient(c *gin.Context) {
@@ -274,11 +324,13 @@ func (r *RestRouter) putPatient(c *gin.Context) {
 }
 
 func (r *RestRouter) getNotes(c *gin.Context) {
-	getObjects[dataModel.Note](r.dbHandler, c)
+	objects := getObjects[dataModel.Note](r.dbHandler, nil, nil)
+	c.IndentedJSON(http.StatusOK, objects)
 }
 
 func (r *RestRouter) getNoteById(c *gin.Context) {
-	getObjectById[dataModel.Note](r.dbHandler, c)
+	object := dbLayer.NewDbObjectWrapper(getObjectById[dataModel.Note](r.dbHandler, c, nil))
+	toJson(c, object)
 }
 
 func (r *RestRouter) postNote(c *gin.Context) {
@@ -318,11 +370,19 @@ func (r *RestRouter) putNote(c *gin.Context) {
 }
 
 func (r *RestRouter) getUsers(c *gin.Context) {
-	getObjects[dataModel.User](r.dbHandler, c)
+	objects := getObjects(r.dbHandler, nil, func(o *dataModel.User) {
+		o.Password = "︻デ┳═ー"
+		o.Salt = "0xdeadbeef"
+	})
+	c.IndentedJSON(http.StatusOK, objects)
 }
 
 func (r *RestRouter) getUserById(c *gin.Context) {
-	getObjectById[dataModel.User](r.dbHandler, c)
+	object := dbLayer.NewDbObjectWrapper(getObjectById(r.dbHandler, c, func(o *dataModel.User) {
+		o.Password = "=^..^="
+		o.Salt = "0xFEEDFACE"
+	}))
+	toJson(c, object)
 }
 
 func (r *RestRouter) postUser(c *gin.Context) {
@@ -343,11 +403,13 @@ func (r *RestRouter) putUser(c *gin.Context) {
 }
 
 func (r *RestRouter) getManifests(c *gin.Context) {
-	getObjects[dataModel.PatientManifest](r.dbHandler, c)
+	objects := getObjects[dataModel.PatientManifest](r.dbHandler, nil, nil)
+	c.IndentedJSON(http.StatusOK, objects)
 }
 
 func (r *RestRouter) getManifestById(c *gin.Context) {
-	getObjectById[dataModel.PatientManifest](r.dbHandler, c)
+	object := dbLayer.NewDbObjectWrapper(getObjectById[dataModel.PatientManifest](r.dbHandler, c, nil))
+	toJson(c, object)
 }
 
 func (r *RestRouter) postManifest(c *gin.Context) {
@@ -379,11 +441,11 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 
 	r.engine.Use(r.checkToken())
 
-	r.engine.POST("/reset", r.resetDB)
-	r.engine.POST("/init", r.initDB)
-	r.engine.GET("api", r.getApi)
+	r.engine.POST(resetURL, r.resetDB)
+	r.engine.POST(initURL, r.initDB)
 
-	r.engine.POST("/login", r.login)
+	r.engine.GET(apiURL, r.getApi)
+	r.engine.POST(loginURL, r.login)
 
 	r.engine.GET(patientsURL, r.getPatients)
 	r.engine.GET(patientsByIdURL, r.getPatientById)
@@ -391,9 +453,6 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 	r.engine.DELETE(patientsByIdURL, r.deletePatient)
 	r.engine.PUT(patientsByIdURL, r.putPatient)
 
-	r.engine.GET(notesURL, r.getNotes)
-	r.engine.GET(notesByIdURL, r.getNoteById)
-	r.engine.POST(notesURL, r.postNote)
 	r.engine.POST(notesByIdUploadURL, r.uploadNote)
 
 	r.engine.DELETE(notesByIdURL, r.deleteNote)

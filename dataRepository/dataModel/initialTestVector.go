@@ -18,11 +18,11 @@ func (InitialTestVevtor) Patients() []Patient {
 func (InitialTestVevtor) Notes() []Note {
 	return []Note{
 		{Name: "Note 1", PatientRowId: 1,
-			SessionDate: 1, NoteDate: 1, FileName: "test1.txt", IsCrypted: false},
+			SessionDate: 1, NoteDate: 1, FileName: "", IsCrypted: false},
 		{Name: "Note 2", PatientRowId: 1,
-			SessionDate: 1, NoteDate: 1, FileName: "test2.txt", IsCrypted: false},
+			SessionDate: 1, NoteDate: 1, FileName: "", IsCrypted: false},
 		{Name: "Note 3", PatientRowId: 1,
-			SessionDate: 1, NoteDate: 1, FileName: "test3.txt", IsCrypted: false},
+			SessionDate: 1, NoteDate: 1, FileName: "", IsCrypted: false},
 	}
 }
 
