@@ -1,0 +1,2 @@
+1. Create DB from schema
+sqlite3 mydatabase.db < db.schema
