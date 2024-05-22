@@ -43,6 +43,15 @@ func main() {
 
 	secret := os.Getenv("SECRET")
 	router := restRouter.RestRouter{}
-	router.Init(dbHandler, secret).GetEngine().Run("localhost:8080")
+
+	const APP_PORT = 8080
+	const APP_IP_ADDRESS_ENV = "APP_IP_ADDRESS"
+	appIP := fmt.Sprintf("localhost:%d", APP_PORT)
+
+	if os.Getenv(APP_IP_ADDRESS_ENV) != "" {
+		appIP = fmt.Sprintf("%s:%d", os.Getenv(APP_IP_ADDRESS_ENV), APP_PORT)
+	}
+
+	router.Init(dbHandler, secret).GetEngine().Run(appIP)
 
 }
