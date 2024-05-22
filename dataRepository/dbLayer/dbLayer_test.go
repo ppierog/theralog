@@ -46,11 +46,15 @@ func TestMain(m *testing.M) {
 	defer func() {
 		db.Close()
 		dbHandler = nil
+		e := os.Remove(dbFile)
+		if e != nil {
+			log.Fatal(e)
+		}
 
 	}()
 
-	status := m.Run()
-	os.Exit(status)
+	m.Run()
+
 }
 func TestPing(t *testing.T) {
 
@@ -69,6 +73,23 @@ func TestNoObjects(t *testing.T) {
 	if len(notes) != 0 {
 		t.Fatalf("Wrong DB initial state")
 	}
+	var patient patientDataModel.Patient
+
+	if FindByName(dbHandler, "Patient 1", &patient) {
+		t.Fatalf("Found by name")
+	}
+	if FindByRowId(dbHandler, 1, &patient) {
+		t.Fatalf("Found by rowId")
+	}
+	var note noteDataModel.Note
+
+	if FindByName(dbHandler, "Note 1", &note) {
+		t.Fatalf("Found by name")
+	}
+	if FindByRowId(dbHandler, 1, &note) {
+		t.Fatalf("Found by rowId")
+	}
+
 }
 func TestPatients(t *testing.T) {
 	patients := FindBy[patientDataModel.Patient](dbHandler, QryBuilder{}.Get())
@@ -78,14 +99,14 @@ func TestPatients(t *testing.T) {
 	}
 	pateintsTestVector :=
 		[]patientDataModel.Patient{
-			{Name: "Piotr Pierog", Occupation: "Sw Developer",
-				City: "Krakow", TelephoneNumber: "+48660345416", BirthYear: 1982},
+			{Name: "Patient 1", Occupation: "Sw Developer",
+				City: "Krakow Krowodrza", TelephoneNumber: "+486111111111", BirthYear: 1982},
 
-			{Name: "Zuzanna Pierog", Occupation: "Student",
-				City: "Krakow", TelephoneNumber: "+48760300300", BirthYear: 2007},
+			{Name: "Patient 2", Occupation: "Student",
+				City: "Krakow Pradnik", TelephoneNumber: "+48222222222", BirthYear: 2007},
 
-			{Name: "Marta Pierog", Occupation: "Therapist",
-				City: "Krakow", TelephoneNumber: "+48760300300", BirthYear: 1979},
+			{Name: "Patient 3", Occupation: "Therapist",
+				City: "Krakow Bronowice", TelephoneNumber: "+48760300300", BirthYear: 1979},
 		}
 
 	for i := 0; i < len(pateintsTestVector); i++ {
@@ -94,13 +115,80 @@ func TestPatients(t *testing.T) {
 
 	patients = FindBy[patientDataModel.Patient](dbHandler, QryBuilder{}.Get())
 
-	if len(patients) != len(pateintsTestVector) {
-		t.Fatalf("Could not insert to DB")
-	}
-	for i := 0; i < len(pateintsTestVector); i++ {
-		if !patientDataModel.Equal(&pateintsTestVector[i], &patients[i]) {
-			t.Fatalf("Objects are not Equal %v vs %v", pateintsTestVector[i], patients[i])
+	fatalIfNotEqual := func(p1 *patientDataModel.Patient, p2 *patientDataModel.Patient) {
+		if !patientDataModel.Equal(p1, p2) {
+			t.Fatalf("Objects are not Equal %v vs %v", p1, p2)
 		}
+	}
+	fatalIfEqual := func(p1 *patientDataModel.Patient, p2 *patientDataModel.Patient) {
+		if patientDataModel.Equal(p1, p2) {
+			t.Fatalf("Objects are Equal %v vs %v", p1, p2)
+		}
+	}
+	fatalIfNotEqualTables := func(p1 []patientDataModel.Patient, p2 []patientDataModel.Patient) {
+		if len(p1) != len(p2) {
+			t.Fatalf("Len p1 %d vs Len p2 %d", len(p1), len(p2))
+		}
+		for i := 0; i < len(p1); i++ {
+			fatalIfNotEqual(&p1[i], &p2[i])
+		}
+	}
+
+	fatalIfNotEqualTables(pateintsTestVector, patients)
+
+	var newPatient patientDataModel.Patient
+
+	for i := 0; i < len(pateintsTestVector); i++ {
+		newPatient = patientDataModel.Patient{}
+		fatalIfEqual(&pateintsTestVector[i], &newPatient)
+
+		FindByName(dbHandler, pateintsTestVector[i].Name+"1", &newPatient)
+
+		fatalIfEqual(&pateintsTestVector[i], &newPatient)
+
+		FindByName(dbHandler, pateintsTestVector[i].Name, &newPatient)
+
+		fatalIfNotEqual(&pateintsTestVector[i], &newPatient)
+
+		newPatient = patientDataModel.Patient{}
+		FindByRowId(dbHandler, int64(i+1), &newPatient)
+
+		fatalIfNotEqual(&pateintsTestVector[i], &newPatient)
+
+	}
+
+	pateintsTestVector[0].Name = "Patient 111"
+	pateintsTestVector[0].City = "Poznan Lawica"
+
+	pateintsTestVector[1].Name = "Patient 222"
+	pateintsTestVector[1].Name = "Poznan Wola"
+
+	pateintsTestVector[2].Name = "Patient 333"
+	pateintsTestVector[2].Name = "Poznan Winiary"
+
+	for i := 0; i < len(pateintsTestVector); i++ {
+		Update(dbHandler, &pateintsTestVector[i])
+	}
+	patients = FindBy[patientDataModel.Patient](dbHandler, QryBuilder{}.Get())
+
+	fatalIfNotEqualTables(pateintsTestVector, patients)
+
+	DeleteByName(dbHandler, &pateintsTestVector[0])
+	patients = FindBy[patientDataModel.Patient](dbHandler, QryBuilder{}.Get())
+	if len(patients) != 2 {
+		t.Fatalf("Wrong length of patients , expected 2")
+	}
+
+	DeleteByRowId(dbHandler, &pateintsTestVector[1])
+	patients = FindBy[patientDataModel.Patient](dbHandler, QryBuilder{}.Get())
+	if len(patients) != 1 {
+		t.Fatalf("Wrong length of patients , expected 2")
+	}
+
+	DeleteBy(dbHandler, QryBuilder{}.Get(), &patientDataModel.Patient{})
+	patients = FindBy[patientDataModel.Patient](dbHandler, QryBuilder{}.Get())
+	if len(patients) != 0 {
+		t.Fatalf("Wrong length of patients , expected 2")
 	}
 
 }

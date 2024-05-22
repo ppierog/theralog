@@ -15,7 +15,7 @@ type DbTable interface {
 }
 
 type DbOps interface {
-	*patient.Patient //| *note.Note
+	*patient.Patient | *note.Note
 
 	Insert() string
 	Update() string
@@ -24,6 +24,12 @@ type DbOps interface {
 	GetRowId() int64
 	GetName() string
 	TableName() string
+}
+
+func executeIf(condition bool, f func()) {
+	if condition {
+		f()
+	}
 }
 
 type QryBuilder struct {
@@ -108,22 +114,37 @@ func FindByName[T DbTable, PT interface {
 	Init(rows *sql.Rows) error
 	TableName() string
 	*T
-}](handler *sqlx.DB, name string, t PT) {
+}](handler *sqlx.DB, name string, t PT) bool {
 	qry := QryBuilder{}
 
 	ret := FindBy[T, PT](handler, qry.WhereName(name))
-	*t = ret[0]
+	if len(ret) > 0 {
+
+		executeIf(len(ret) > 1,
+			func() { log.Println("Warning : more than 1 elements, returning index 0") })
+
+		*t = ret[0]
+
+		return true
+	}
+	return false
 }
 
 func FindByRowId[T DbTable, PT interface {
 	Init(rows *sql.Rows) error
 	TableName() string
 	*T
-}](handler *sqlx.DB, rowId int64, t PT) {
+}](handler *sqlx.DB, rowId int64, t PT) bool {
 	qry := QryBuilder{}
 
 	ret := FindBy[T, PT](handler, qry.WhereRowId(rowId))
-	*t = ret[0]
+	if len(ret) > 0 {
+		executeIf(len(ret) > 1,
+			func() { log.Println("Warning : more than 1 elements, returning index 0") })
+		*t = ret[0]
+		return true
+	}
+	return false
 }
 
 func Insert[T DbOps](handler *sqlx.DB, obj T) {
