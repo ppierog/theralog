@@ -14,6 +14,8 @@ import (
 
 	"time"
 
+	"github.com/gin-contrib/cors"
+
 	"github.com/golang-jwt/jwt"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
@@ -251,16 +253,17 @@ func (r *RestRouter) login(c *gin.Context) {
 	}
 
 	tokenRepo := cred.TokenRepository{Secret: r.secret}
+	expiresAt := time.Now().Add(time.Minute * 15)
 	jwt, err := tokenRepo.NewAccessToken(cred.UserClaims{Email: creditionals.Email, StandardClaims: jwt.StandardClaims{
 		IssuedAt:  time.Now().Unix(),
-		ExpiresAt: time.Now().Add(time.Minute * 15).Unix(),
+		ExpiresAt: expiresAt.Unix(),
 	}})
 
 	if err != nil {
 		c.JSON(500, gin.H{"code": "Internal Server Error", "message": "Could not generate token"})
 		return
 	}
-	c.IndentedJSON(http.StatusOK, cred.Token{Jwt: jwt})
+	c.IndentedJSON(http.StatusOK, cred.Token{Jwt: jwt, ExpiresAt: expiresAt})
 }
 
 func (r *RestRouter) checkToken() gin.HandlerFunc {
@@ -276,7 +279,7 @@ func (r *RestRouter) checkToken() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		token := c.Request.Header.Get("token")
+		token := c.Request.Header.Get("Token")
 		tokenRepo := cred.TokenRepository{Secret: r.secret}
 		user := tokenRepo.ParseAccessToken(token)
 		if user == nil {
@@ -288,6 +291,7 @@ func (r *RestRouter) checkToken() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token already expired : " + time.Unix(user.ExpiresAt, 0).String()})
 			return
 		}
+
 		// Set example variable
 		// c.Set("example", "12345")
 		c.Next()
@@ -442,12 +446,24 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 	r.dbHandler = dbHandler
 	r.secret = secret
 
-	//https: //go.dev/doc/tutorial/web-service-gin
+	// https: //go.dev/doc/tutorial/web-service-gin
 	r.engine = gin.Default()
 
 	// Set a lower memory limit for multipart forms (default is 32 MiB)
 	r.engine.MaxMultipartMemory = 8 << 20 // 8 MiB
 
+	// CORS probably goes first as middleware
+	// https://github.com/gin-contrib/cors
+	r.engine.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowHeaders:     []string{"Origin", "Token"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		//AllowOriginFunc: func(origin string) bool {
+		//	return origin == "localhost"
+		//},
+		MaxAge: 12 * time.Hour,
+	}))
 	r.engine.Use(r.checkToken())
 
 	r.engine.POST(resetURL, r.resetDB)

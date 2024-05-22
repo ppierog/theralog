@@ -1,6 +1,8 @@
 package cred
 
 import (
+	"time"
+
 	"github.com/golang-jwt/jwt"
 )
 
@@ -11,7 +13,8 @@ type UserClaims struct {
 }
 
 type Token struct {
-	Jwt string `json:"token"`
+	Jwt       string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 type TokenRepository struct {
