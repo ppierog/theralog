@@ -36,7 +36,6 @@ func main() {
 	}
 
 	router := restRouter.RestRouter{}
-	router.Get().Init(dbHandler)
-	router.Get().Init(dbHandler).GetEngine().Run("localhost:8080")
+	router.Init(dbHandler).GetEngine().Run("localhost:8080")
 
 }

@@ -96,17 +96,7 @@ func TestPatients(t *testing.T) {
 	if len(patients) != 0 {
 		t.Fatalf("Wrong DB initial state")
 	}
-	pateintsTestVector :=
-		[]dataModel.Patient{
-			{Name: "Patient 1", Occupation: "Sw Developer",
-				City: "Krakow Krowodrza", TelephoneNumber: "+486111111111", BirthYear: 1982},
-
-			{Name: "Patient 2", Occupation: "Student",
-				City: "Krakow Pradnik", TelephoneNumber: "+48222222222", BirthYear: 2007},
-
-			{Name: "Patient 3", Occupation: "Therapist",
-				City: "Krakow Bronowice", TelephoneNumber: "+48760300300", BirthYear: 1979},
-		}
+	pateintsTestVector := dataModel.InitialTestVevtor{}.Patients()
 
 	for i := 0; i < len(pateintsTestVector); i++ {
 		Insert(dbHandler, &pateintsTestVector[i])

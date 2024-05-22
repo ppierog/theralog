@@ -10,11 +10,11 @@ import (
 )
 
 type DbTable interface {
-	dataModel.Patient | dataModel.Note
+	dataModel.Patient | dataModel.Note | dataModel.User
 }
 
 type DbOps interface {
-	*dataModel.Patient | *dataModel.Note
+	*dataModel.Patient | *dataModel.Note | *dataModel.User
 
 	Insert() string
 	Update() string
@@ -161,14 +161,14 @@ func Insert[T DbOps](handler *sqlx.DB, obj T) {
 
 }
 
-func Exec(handler *sqlx.DB, qry *QryBuilder) {
+func Exec(handler *sqlx.DB, qry *QryBuilder) sql.Result {
 
-	_, err := handler.Exec(qry.Qry)
+	result, err := handler.Exec(qry.Qry)
 
 	if err != nil {
 		log.Fatal("Could not Exec ", qry.Qry, err)
-		return
 	}
+	return result
 }
 
 func Update[T DbOps](handler *sqlx.DB, obj T) {
@@ -178,7 +178,7 @@ func Update[T DbOps](handler *sqlx.DB, obj T) {
 	Exec(handler, qry.Get())
 }
 
-func DeleteBy[T DbOps](handler *sqlx.DB, qry *QryBuilder, obj T) {
+func DeleteBy[T DbOps](handler *sqlx.DB, qry *QryBuilder, obj T) int64 {
 
 	mainQry := QryBuilder{}
 	mainQry.DeleteFrom(obj.TableName())
@@ -186,17 +186,22 @@ func DeleteBy[T DbOps](handler *sqlx.DB, qry *QryBuilder, obj T) {
 		mainQry.Qry += qry.Qry
 	}
 
-	Exec(handler, &mainQry)
+	result := Exec(handler, &mainQry)
 	obj.SetRowId(-1)
+	num, err := result.RowsAffected()
+	if err != nil {
+		return 0
+	}
+	return num
 
 }
 
-func DeleteByName[T DbOps](handler *sqlx.DB, obj T) {
+func DeleteByName[T DbOps](handler *sqlx.DB, obj T) int64 {
 	qry := QryBuilder{}
-	DeleteBy(handler, qry.WhereName(obj.GetName()), obj)
+	return DeleteBy(handler, qry.WhereName(obj.GetName()), obj)
 }
 
-func DeleteByRowId[T DbOps](handler *sqlx.DB, obj T) {
+func DeleteByRowId[T DbOps](handler *sqlx.DB, obj T) int64 {
 	qry := QryBuilder{}
-	DeleteBy(handler, qry.WhereRowId(obj.GetRowId()), obj)
+	return DeleteBy(handler, qry.WhereRowId(obj.GetRowId()), obj)
 }
