@@ -197,7 +197,7 @@ func DeleteBy[T DbOps](handler *sqlx.DB, qry *QryBuilder, obj T) int64 {
 	}
 
 	result := Exec(handler, &mainQry)
-	obj.SetRowId(-1)
+
 	num, err := result.RowsAffected()
 	if err != nil {
 		return 0

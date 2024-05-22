@@ -1,2 +1,4 @@
 1. Create DB from schema
-sqlite3 mydatabase.db < db.schema
+sqlite3 mydatabase.db < db.schemas.sql
+2. Working db in project
+theraLog.sqlite3

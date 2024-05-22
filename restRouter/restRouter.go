@@ -2,8 +2,10 @@ package restRouter
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"theraLog/cred"
 	"theraLog/dataRepository/dataModel"
@@ -22,10 +24,12 @@ const patientsURL = "/patients"
 const patientsByIdURL = "/patients/:id"
 const notesURL = "/notes"
 const notesByIdURL = "/notes/:id"
+const notesByIdUploadURL = "/notes/:id/upload"
 const usersURL = "/users"
 const usersByIdURL = "/users/:id"
 const manifestsURL = "/manifests"
 const manifestsByIdURL = "/manifests/:id"
+const appdataPath = "appdata/"
 
 type RestRouter struct {
 	dbHandler *sqlx.DB
@@ -195,7 +199,7 @@ func (r *RestRouter) login(c *gin.Context) {
 	}
 
 	tokenRepo := cred.TokenRepository{Secret: r.secret}
-	jwt, err := tokenRepo.NewAccessToken(cred.UserClaims{Login: creditionals.Email, StandardClaims: jwt.StandardClaims{
+	jwt, err := tokenRepo.NewAccessToken(cred.UserClaims{Email: creditionals.Email, StandardClaims: jwt.StandardClaims{
 		IssuedAt:  time.Now().Unix(),
 		ExpiresAt: time.Now().Add(time.Minute * 15).Unix(),
 	}})
@@ -205,6 +209,33 @@ func (r *RestRouter) login(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, cred.Token{Jwt: jwt})
+}
+
+func (r *RestRouter) checkToken() gin.HandlerFunc {
+
+	return func(c *gin.Context) {
+
+		if c.Request.URL.String() == "/login" {
+			c.Next()
+		} else {
+			token := c.Request.Header.Get("token")
+			tokenRepo := cred.TokenRepository{Secret: r.secret}
+			user := tokenRepo.ParseAccessToken(token)
+			if user == nil {
+				c.AbortWithStatusJSON(401, gin.H{"error": "No Auth token in header request"})
+				return
+			}
+			currTime := time.Now().Unix()
+			if user.ExpiresAt <= currTime {
+				c.AbortWithStatusJSON(401, gin.H{"error": "Token already expired : " + time.Unix(user.ExpiresAt, 0).String()})
+				return
+			}
+			// Set example variable
+			// c.Set("example", "12345")
+			c.Next()
+		}
+
+	}
 
 }
 
@@ -219,10 +250,23 @@ func (r *RestRouter) getPatientById(c *gin.Context) {
 func (r *RestRouter) postPatient(c *gin.Context) {
 	newPatient := dataModel.Patient{}
 	postObject(r.dbHandler, c, &newPatient, nil)
+	patientDirName := appdataPath + strconv.Itoa(int(newPatient.RowId))
+
+	if err := os.Mkdir(patientDirName, os.ModePerm); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (r *RestRouter) deletePatient(c *gin.Context) {
-	deleteObject(r.dbHandler, c, &dataModel.Patient{})
+	patient := dataModel.Patient{}
+	deleteObject(r.dbHandler, c, &patient)
+
+	patientDirName := appdataPath + strconv.Itoa(int(patient.RowId))
+
+	err := os.RemoveAll(patientDirName)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (r *RestRouter) putPatient(c *gin.Context) {
@@ -241,6 +285,30 @@ func (r *RestRouter) postNote(c *gin.Context) {
 	newNote := dataModel.Note{}
 	postObject(r.dbHandler, c, &newNote, nil)
 }
+
+func (r *RestRouter) uploadNote(c *gin.Context) {
+
+	id := c.Param("id")
+	rowId, _ := strconv.ParseInt(id, 10, 64)
+	note := dataModel.Note{}
+
+	if !dbLayer.FindByRowId(r.dbHandler, rowId, &note) {
+		c.String(http.StatusNotFound, "Could not find appropriate note!")
+		return
+	}
+
+	isCrypted, _ := strconv.ParseBool(c.Request.Header.Get("isCrypted"))
+	note.IsCrypted = isCrypted
+
+	file, _ := c.FormFile("file")
+	note.FileName = file.Filename
+	dbLayer.Update(r.dbHandler, &note)
+
+	dest := fmt.Sprintf("%s%d/%s", appdataPath, note.PatientRowId, note.FileName)
+	c.SaveUploadedFile(file, dest)
+	c.String(http.StatusOK, fmt.Sprintf("%s uploaded!\n", file.Filename))
+}
+
 func (r *RestRouter) deleteNote(c *gin.Context) {
 	deleteObject(r.dbHandler, c, &dataModel.Note{})
 }
@@ -305,6 +373,12 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 
 	//https: //go.dev/doc/tutorial/web-service-gin
 	r.engine = gin.Default()
+
+	// Set a lower memory limit for multipart forms (default is 32 MiB)
+	r.engine.MaxMultipartMemory = 8 << 20 // 8 MiB
+
+	r.engine.Use(r.checkToken())
+
 	r.engine.POST("/reset", r.resetDB)
 	r.engine.POST("/init", r.initDB)
 	r.engine.GET("api", r.getApi)
@@ -320,6 +394,8 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 	r.engine.GET(notesURL, r.getNotes)
 	r.engine.GET(notesByIdURL, r.getNoteById)
 	r.engine.POST(notesURL, r.postNote)
+	r.engine.POST(notesByIdUploadURL, r.uploadNote)
+
 	r.engine.DELETE(notesByIdURL, r.deleteNote)
 	r.engine.PUT(notesByIdURL, r.putNote)
 
@@ -336,5 +412,4 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 	r.engine.PUT(manifestsByIdURL, r.putManifest)
 
 	return r
-
 }

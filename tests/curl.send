@@ -1,0 +1,5 @@
+curl -X POST http://localhost:8080/notes/3/upload \
+  -F "file=@/home/ppierog/golang/theralog/go.mod" \
+  -H "Content-Type: multipart/form-data" \
+  -H "token:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2dpbiI6ImZha2VAZ21haWwuY29uIiwiZXhwIjoxNzE1Njk1NjkwLCJpYXQiOjE3MTU2OTQ3OTB9.e_yKiBzcSt_hsWQlwNlyE9FsqiHHeNzxl3qWOYMEgjM" 
+echo ""

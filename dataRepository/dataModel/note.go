@@ -49,5 +49,6 @@ func (p *Note) Insert() string {
 }
 
 func (p *Note) Update() string {
-	panic("Not Implemented")
+	const UPDATE_QRY = "UPDATE %s SET name='%s', session_date=%d, note_date=%d, file_name='%s', is_crypted=%v WHERE rowid=%d"
+	return fmt.Sprintf(UPDATE_QRY, p.TableName(), p.Name, p.SessionDate, p.NoteDate, p.FileName, p.IsCrypted, p.RowId)
 }

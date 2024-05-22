@@ -33,7 +33,6 @@ func (p *User) Init(rows *sql.Rows) error {
 	if rows != nil {
 		err := rows.Scan(&p.RowId, &p.Name, &p.LastName, &p.Email, &p.TelephoneNumber, &p.Salt, &p.Password, &p.PubKey)
 		return err
-
 	} else {
 		return nil
 	}

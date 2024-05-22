@@ -1,5 +1,5 @@
 -- Create DB :
--- sqlite3 db_name < db.schema.sql
+-- sqlite3 db_name < db.schemas.sql
 -- Cmds :
 -- sqlite3>
 -- .tables

@@ -6,12 +6,12 @@ import (
 
 // https://pascalallen.medium.com/jwt-authentication-with-go-242215a9b4f8
 type UserClaims struct {
-	Login string `json:"login"`
+	Email string `json:"login"`
 	jwt.StandardClaims
 }
 
 type Token struct {
-	Jwt string `json:"jwt"`
+	Jwt string `json:"token"`
 }
 
 type TokenRepository struct {
@@ -31,17 +31,23 @@ func (p *TokenRepository) NewRefreshToken(claims jwt.StandardClaims) (string, er
 }
 
 func (p *TokenRepository) ParseAccessToken(accessToken string) *UserClaims {
-	parsedAccessToken, _ := jwt.ParseWithClaims(accessToken, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+	parsedAccessToken, err := jwt.ParseWithClaims(accessToken, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(p.Secret), nil
 	})
-
+	if err != nil {
+		return nil
+	}
 	return parsedAccessToken.Claims.(*UserClaims)
+
 }
 
 func (p *TokenRepository) ParseRefreshToken(refreshToken string) *jwt.StandardClaims {
-	parsedRefreshToken, _ := jwt.ParseWithClaims(refreshToken, &jwt.StandardClaims{}, func(token *jwt.Token) (interface{}, error) {
+	parsedRefreshToken, err := jwt.ParseWithClaims(refreshToken, &jwt.StandardClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(p.Secret), nil
 	})
+	if err != nil {
+		return nil
+	}
 
 	return parsedRefreshToken.Claims.(*jwt.StandardClaims)
 }
