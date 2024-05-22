@@ -1,4 +1,7 @@
 1. Create DB from schema
-sqlite3 mydatabase.db < db.schemas.sql
-2. Working db in project
-theraLog.sqlite3
+    sqlite3 mydatabase.db < db.schemas.sql
+2. How to build/test/run
+    go build ./ || go test ./... || go run ./ || ./theraLog
+3. Working db in project
+    theraLog.sqlite3
+ 

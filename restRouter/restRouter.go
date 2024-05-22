@@ -11,6 +11,7 @@ import (
 	"theraLog/cred"
 	"theraLog/dataRepository/dataModel"
 	"theraLog/dataRepository/dbLayer"
+
 	"time"
 
 	"github.com/golang-jwt/jwt"
@@ -176,6 +177,7 @@ type idReqWithContent[T any] struct {
 	OBJ T      `json:"obj"`
 }
 
+// @TODO pp :  Be more precise here
 func AddOperation[REQ any, RES any](reflector *openapi3.Reflector, req *REQ, res *RES, method string, url string) {
 	op := openapi3.Operation{}
 
@@ -184,6 +186,7 @@ func AddOperation[REQ any, RES any](reflector *openapi3.Reflector, req *REQ, res
 	reflector.Spec.AddOperation(method, url, op)
 }
 
+// @TODO pp :  Be more precise here
 func AddOperations[RES any](reflector *openapi3.Reflector, url string) {
 	AddOperation[blankReq](reflector, nil, new([]RES), http.MethodGet, url)
 	AddOperation(reflector, new(idReq), new(RES), http.MethodGet, url+"/{id}")
@@ -232,7 +235,9 @@ func (r *RestRouter) login(c *gin.Context) {
 	}
 
 	qry := dbLayer.QryBuilder{}
-	users := dbLayer.FindBy[dataModel.User](r.dbHandler, qry.Where("email").Is(creditionals.Email))
+	// qry := dbLayer.QryBuilder{}.Get().Where("email").IsEqual(dbLayer.SqlWrapValue(creditionals.Email)).Latch()
+	qry.Where("email").IsEqual(dbLayer.SqlWrapValue(creditionals.Email))
+	users := dbLayer.FindBy[dataModel.User](r.dbHandler, &qry)
 	if len(users) != 1 {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": "NOT_FOUND", "message": "Could not login"})
 		return
@@ -263,25 +268,29 @@ func (r *RestRouter) checkToken() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		url := c.Request.URL.String()
 
-		if url == loginURL || url == apiURL {
+		if url == loginURL || url == apiURL || url == initURL || url == resetURL {
 			c.Next()
-		} else {
-			token := c.Request.Header.Get("token")
-			tokenRepo := cred.TokenRepository{Secret: r.secret}
-			user := tokenRepo.ParseAccessToken(token)
-			if user == nil {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "No Auth token in header request"})
-				return
-			}
-			currTime := time.Now().Unix()
-			if user.ExpiresAt <= currTime {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token already expired : " + time.Unix(user.ExpiresAt, 0).String()})
-				return
-			}
-			// Set example variable
-			// c.Set("example", "12345")
-			c.Next()
+			return
 		}
+		if url == usersURL && c.Request.Method == http.MethodPost {
+			c.Next()
+			return
+		}
+		token := c.Request.Header.Get("token")
+		tokenRepo := cred.TokenRepository{Secret: r.secret}
+		user := tokenRepo.ParseAccessToken(token)
+		if user == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "No Auth token in header request"})
+			return
+		}
+		currTime := time.Now().Unix()
+		if user.ExpiresAt <= currTime {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token already expired : " + time.Unix(user.ExpiresAt, 0).String()})
+			return
+		}
+		// Set example variable
+		// c.Set("example", "12345")
+		c.Next()
 
 	}
 

@@ -1,5 +1,5 @@
-db-ever
-sqlite3
-golang
+db-ever - apt
+sqlite3 - apt
+golang - snap
 
 

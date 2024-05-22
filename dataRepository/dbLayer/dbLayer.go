@@ -44,6 +44,32 @@ type QryBuilder struct {
 	Qry string
 }
 
+func (qryBuilder QryBuilder) Get() *QryBuilder {
+	return &qryBuilder
+}
+
+func (qryBuilder *QryBuilder) Latch() QryBuilder {
+	return *qryBuilder
+}
+
+func typeof(v interface{}) string {
+	return fmt.Sprintf("%T", v)
+}
+
+func SqlWrapValue[T string | int64](t T) string {
+
+	switch typeof(t) {
+	case "string":
+		return fmt.Sprintf("'%v'", t)
+	case "int64":
+		return fmt.Sprintf("%v", t)
+	default:
+		log.Fatalf("Type is not supported")
+		return ""
+
+	}
+}
+
 func (qryBuilder *QryBuilder) SelectFrom(tableName string) *QryBuilder {
 	qryBuilder.Qry = fmt.Sprintf("SELECT rowid, * FROM  %s ", tableName)
 	return qryBuilder
@@ -54,27 +80,22 @@ func (qryBuilder *QryBuilder) DeleteFrom(tableName string) *QryBuilder {
 	return qryBuilder
 }
 
-func (qryBuilder *QryBuilder) WhereName(name string) *QryBuilder {
-	qryBuilder.Qry = fmt.Sprintf("%s WHERE name = '%s' ", qryBuilder.Qry, name)
+func (qryBuilder *QryBuilder) Where(predicate string) *QryBuilder {
+	qryBuilder.Qry = fmt.Sprintf("%s WHERE %s ", qryBuilder.Qry, predicate)
 	return qryBuilder
 }
 
-func (qryBuilder *QryBuilder) Where(name string) *QryBuilder {
-	qryBuilder.Qry = fmt.Sprintf("%s WHERE %s ", qryBuilder.Qry, name)
-	return qryBuilder
-}
-
-func (qryBuilder *QryBuilder) Is(name string) *QryBuilder {
-	qryBuilder.Qry = fmt.Sprintf("%s = '%s'", qryBuilder.Qry, name)
+func (qryBuilder *QryBuilder) IsEqual(value string) *QryBuilder {
+	qryBuilder.Qry = fmt.Sprintf("%s = %s", qryBuilder.Qry, value)
 	return qryBuilder
 }
 
 func (qryBuilder *QryBuilder) WhereRowId(rowId int64) *QryBuilder {
-	qryBuilder.Qry = fmt.Sprintf("%s WHERE rowid = %d ", qryBuilder.Qry, rowId)
-	return qryBuilder
+	return qryBuilder.Where("rowid").IsEqual(SqlWrapValue(rowId))
 }
-func (qryBuilder QryBuilder) Get() *QryBuilder {
-	return &qryBuilder
+
+func (qryBuilder *QryBuilder) WhereName(name string) *QryBuilder {
+	return qryBuilder.Where("name").IsEqual(SqlWrapValue(name))
 }
 
 type DbLayer struct {
