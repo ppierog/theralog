@@ -7,9 +7,9 @@ import (
 
 type User struct {
 	RowId           int64  `json:"id"`
-	Name            string `json:"name"`
-	LastName        string `json:"lastName"`
-	Email           string `json:"email"`
+	Name            string `json:"name" binding:"required"`
+	LastName        string `json:"lastName" binding:"required"`
+	Email           string `json:"email" binding:"required"`
 	TelephoneNumber string `json:"telephoneNumber"`
 	PasswordSalt    string `json:"passwordSalt"`
 	PasswordSha     string `json:"passwordSha"`
@@ -45,8 +45,8 @@ func (p *User) SetRowId(rowId int64) {
 }
 
 func (p *User) Insert() string {
-	const INSERT_QRY = "INSERT INTO User VALUES('%s', '%s', '%s', '%s', '%s', '%s', '%s');"
-	return fmt.Sprintf(INSERT_QRY, p.Name, p.LastName, p.Email, p.TelephoneNumber, p.PasswordSalt, p.PasswordSha, p.PubKey)
+	const INSERT_QRY = "INSERT INTO %s VALUES('%s', '%s', '%s', '%s', '%s', '%s', '%s');"
+	return fmt.Sprintf(INSERT_QRY, p.TableName(), p.Name, p.LastName, p.Email, p.TelephoneNumber, p.PasswordSalt, p.PasswordSha, p.PubKey)
 }
 
 func (p *User) Update() string {

@@ -51,14 +51,15 @@ func getObjectById[T dbLayer.DbTable, PT interface {
 	if dbLayer.FindByRowId[T, PT](dbHandler, rowId, &object) {
 		c.IndentedJSON(http.StatusOK, object)
 	} else {
-		c.JSON(404, gin.H{"code": "PAGE_NOT_FOUND", "message": "Page not found"})
+		c.JSON(404, gin.H{"code": "PAGE_NOT_FOUND", "message": "Object not found"})
+
 	}
 }
 
 func postObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
 
 	if err := c.BindJSON(t); err != nil {
-		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data"})
+		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
 		return
 	}
 	dbLayer.Insert(dbHandler, t)
@@ -73,6 +74,19 @@ func deleteObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
 	}
 }
 
+func putObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
+
+	if err := c.BindJSON(t); err != nil {
+		c.JSON(400, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
+		return
+	}
+	id := c.Param("id")
+	rowId, _ := strconv.ParseInt(id, 10, 64)
+	t.SetRowId(rowId)
+
+	dbLayer.Update(dbHandler, t)
+}
+
 func (r *RestRouter) resetDB(c *gin.Context) {
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.Patient{})
 	dbLayer.DeleteBy(r.dbHandler, nil, &dataModel.Note{})
@@ -83,26 +97,33 @@ func (r *RestRouter) resetDB(c *gin.Context) {
 func (r *RestRouter) initDB(c *gin.Context) {
 	testData := dataModel.InitialTestVevtor{}
 
-	patientsTestVector := testData.Patients()
-	notesTestVector := testData.Notes()
-	userTestVector := testData.Users()
-	manifestsTestVector := testData.Manifests()
-
-	for _, patient := range patientsTestVector {
+	for _, patient := range testData.Patients() {
 		dbLayer.Insert(r.dbHandler, &patient)
 	}
 
-	for _, note := range notesTestVector {
+	for _, note := range testData.Notes() {
 		dbLayer.Insert(r.dbHandler, &note)
 	}
 
-	for _, user := range userTestVector {
+	for _, user := range testData.Users() {
 		dbLayer.Insert(r.dbHandler, &user)
 	}
 
-	for _, manifest := range manifestsTestVector {
+	for _, manifest := range testData.Manifests() {
 		dbLayer.Insert(r.dbHandler, &manifest)
 	}
+}
+
+type blankReq struct{}
+type blankRes struct{}
+
+type idReq struct {
+	ID string `path:"id" example:"1"`
+}
+
+type idReqWithContent[T any] struct {
+	ID  string `path:"id" example:"1"`
+	OBJ T      `json:"obj"`
 }
 
 func AddOperation[REQ any, RES any](reflector *openapi3.Reflector, req *REQ, res *RES, method string, url string) {
@@ -110,6 +131,14 @@ func AddOperation[REQ any, RES any](reflector *openapi3.Reflector, req *REQ, res
 	reflector.SetRequest(&op, req, method)
 	reflector.SetJSONResponse(&op, new(RES), http.StatusOK)
 	reflector.Spec.AddOperation(method, url, op)
+}
+
+func AddOperations[RES any](reflector *openapi3.Reflector, url string) {
+	AddOperation[blankReq](reflector, nil, new([]RES), http.MethodGet, url)
+	AddOperation(reflector, new(idReq), new(RES), http.MethodGet, url+"/{id}")
+	AddOperation[RES, blankRes](reflector, new(RES), nil, http.MethodPost, url)
+	AddOperation[idReq, blankRes](reflector, new(idReq), nil, http.MethodDelete, url+"/{id}")
+	AddOperation[idReqWithContent[RES], blankRes](reflector, new(idReqWithContent[RES]), nil, http.MethodPut, url+"/{id}")
 }
 
 func (r *RestRouter) getApi(c *gin.Context) {
@@ -120,36 +149,10 @@ func (r *RestRouter) getApi(c *gin.Context) {
 		WithVersion("1.00").
 		WithDescription("TheraLog Api description")
 
-	type blankReq struct{}
-	type blankRes struct{}
-
-	type idReq struct {
-		ID string `path:"id" example:"1"`
-	}
-
-	type patientsResp struct {
-		patients []dataModel.Patient
-	}
-
-	AddOperation[blankReq](&reflector, nil, new([]dataModel.Patient), http.MethodGet, patientsURL)
-	AddOperation(&reflector, new(idReq), new(dataModel.Patient), http.MethodGet, patientsURL+"/{id}")
-	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, patientsURL)
-	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, patientsURL+"/{id}")
-
-	AddOperation[blankReq](&reflector, nil, new([]dataModel.Note), http.MethodGet, notesURL)
-	AddOperation(&reflector, new(idReq), new(dataModel.Note), http.MethodGet, notesURL+"/{id}")
-	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, notesURL)
-	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, notesURL+"/{id}")
-
-	AddOperation[blankReq](&reflector, nil, new([]dataModel.User), http.MethodGet, usersURL)
-	AddOperation(&reflector, new(idReq), new(dataModel.User), http.MethodGet, usersURL+"/{id}")
-	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, usersURL)
-	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, usersURL+"/{id}")
-
-	AddOperation[blankReq](&reflector, nil, new([]dataModel.PatientManifest), http.MethodGet, manifestsURL)
-	AddOperation(&reflector, new(idReq), new(dataModel.PatientManifest), http.MethodGet, manifestsURL+"/{id}")
-	AddOperation[blankReq, blankRes](&reflector, nil, nil, http.MethodPost, manifestsURL)
-	AddOperation[idReq, blankRes](&reflector, new(idReq), nil, http.MethodDelete, manifestsURL+"/{id}")
+	AddOperations[dataModel.Patient](&reflector, patientsURL)
+	AddOperations[dataModel.Note](&reflector, notesURL)
+	AddOperations[dataModel.User](&reflector, usersURL)
+	AddOperations[dataModel.PatientManifest](&reflector, manifestsURL)
 
 	schema, err := reflector.Spec.MarshalYAML()
 	if err != nil {
@@ -179,6 +182,10 @@ func (r *RestRouter) deletePatient(c *gin.Context) {
 	deleteObject(r.dbHandler, c, &dataModel.Patient{})
 }
 
+func (r *RestRouter) putPatient(c *gin.Context) {
+	putObject(r.dbHandler, c, &dataModel.Patient{})
+}
+
 func (r *RestRouter) getNotes(c *gin.Context) {
 	getObjects[dataModel.Note](r.dbHandler, c)
 }
@@ -193,6 +200,10 @@ func (r *RestRouter) postNote(c *gin.Context) {
 }
 func (r *RestRouter) deleteNote(c *gin.Context) {
 	deleteObject(r.dbHandler, c, &dataModel.Note{})
+}
+
+func (r *RestRouter) putNote(c *gin.Context) {
+	putObject(r.dbHandler, c, &dataModel.Note{})
 }
 
 func (r *RestRouter) getUsers(c *gin.Context) {
@@ -212,6 +223,10 @@ func (r *RestRouter) deleteUser(c *gin.Context) {
 	deleteObject(r.dbHandler, c, &dataModel.User{})
 }
 
+func (r *RestRouter) putUser(c *gin.Context) {
+	putObject(r.dbHandler, c, &dataModel.User{})
+}
+
 func (r *RestRouter) getManifests(c *gin.Context) {
 	getObjects[dataModel.PatientManifest](r.dbHandler, c)
 }
@@ -227,6 +242,10 @@ func (r *RestRouter) postManifest(c *gin.Context) {
 
 func (r *RestRouter) deleteManifest(c *gin.Context) {
 	deleteObject(r.dbHandler, c, &dataModel.PatientManifest{})
+}
+
+func (r *RestRouter) putManifest(c *gin.Context) {
+	putObject(r.dbHandler, c, &dataModel.PatientManifest{})
 }
 
 func (r *RestRouter) GetEngine() *gin.Engine {
@@ -246,21 +265,25 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB) *RestRouter {
 	r.engine.GET(patientsByIdURL, r.getPatientById)
 	r.engine.POST(patientsURL, r.postPatient)
 	r.engine.DELETE(patientsByIdURL, r.deletePatient)
+	r.engine.PUT(patientsByIdURL, r.putPatient)
 
 	r.engine.GET(notesURL, r.getNotes)
 	r.engine.GET(notesByIdURL, r.getNoteById)
 	r.engine.POST(notesURL, r.postNote)
 	r.engine.DELETE(notesByIdURL, r.deleteNote)
+	r.engine.PUT(notesByIdURL, r.putNote)
 
 	r.engine.GET(usersURL, r.getUsers)
 	r.engine.GET(usersByIdURL, r.getUserById)
 	r.engine.POST(usersURL, r.postUser)
 	r.engine.DELETE(usersByIdURL, r.deleteUser)
+	r.engine.PUT(usersByIdURL, r.putUser)
 
 	r.engine.GET(manifestsURL, r.getManifests)
 	r.engine.GET(manifestsByIdURL, r.getManifestById)
 	r.engine.POST(manifestsURL, r.postManifest)
 	r.engine.DELETE(manifestsByIdURL, r.deleteManifest)
+	r.engine.PUT(manifestsByIdURL, r.putManifest)
 
 	return r
 

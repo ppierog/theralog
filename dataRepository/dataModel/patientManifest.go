@@ -7,9 +7,9 @@ import (
 
 type PatientManifest struct {
 	RowId        int64  `json:"id"`
-	PatientId    int64  `json:"patientId"`
-	UserId       int64  `json:"userId"`
-	CrudMask     int    `json:"crudMask"`
+	PatientId    int64  `json:"patientId" binding:"required"`
+	UserId       int64  `json:"userId" binding:"required"`
+	CrudMask     int    `json:"crudMask" binding:"required"`
 	EncryptedAes string `json:"encryptedAes"`
 }
 
