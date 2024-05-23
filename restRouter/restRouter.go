@@ -458,10 +458,12 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 		AllowOrigins:     []string{"*"},
 		AllowHeaders:     []string{"Origin", "Token"},
 		ExposeHeaders:    []string{"Content-Length"},
+		AllowMethods:     []string{"GET", "DELETE", "POST"},
 		AllowCredentials: true,
-		//AllowOriginFunc: func(origin string) bool {
-		//	return origin == "localhost"
-		//},
+		/* AllowOriginFunc: func(origin string) bool {
+			return origin == "localhost"
+		},
+		*/
 		MaxAge: 12 * time.Hour,
 	}))
 	r.engine.Use(r.checkToken())
