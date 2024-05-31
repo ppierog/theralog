@@ -482,6 +482,7 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 
 	r.engine.GET(notesURL, r.getNotes)
 	r.engine.POST(notesByIdUploadURL, r.uploadNote)
+	r.engine.POST(notesURL, r.postNote)
 	r.engine.DELETE(notesByIdURL, r.deleteNote)
 	r.engine.PUT(notesByIdURL, r.putNote)
 
