@@ -45,6 +45,10 @@ type RestRouter struct {
 	secret    string
 }
 
+type Id struct {
+	RowId int64 `json:"id"`
+}
+
 func toJson[T dbLayer.DbTable](c *gin.Context, o dbLayer.DbObjectWrapper[T]) {
 	if o.Err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": "PAGE_NOT_FOUND", "message": o.Err})
@@ -94,7 +98,7 @@ func getObjectById[T dbLayer.DbTable, PT interface {
 		}
 		return object, nil
 	} else {
-		return object, errors.New("Object Not found")
+		return object, errors.New("object not found")
 	}
 }
 
@@ -108,13 +112,14 @@ func postObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T, prepar
 		prepare(t)
 	}
 	dbLayer.Insert(dbHandler, t)
+	c.IndentedJSON(http.StatusOK, Id{RowId: t.GetRowId()})
 }
 
 func deleteObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
 	id := c.Param("id")
 	rowId, _ := strconv.ParseInt(id, 10, 64)
 	t.SetRowId(rowId)
-	if 0 == dbLayer.DeleteByRowId(dbHandler, t) {
+	if dbLayer.DeleteByRowId(dbHandler, t) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not delete object"})
 	}
 }
@@ -318,6 +323,7 @@ func (r *RestRouter) postPatient(c *gin.Context) {
 	if err := os.Mkdir(patientDirName, os.ModePerm); err != nil {
 		log.Fatal(err)
 	}
+
 }
 
 func (r *RestRouter) deletePatient(c *gin.Context) {
@@ -481,6 +487,7 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 	r.engine.PUT(patientsByIdURL, r.putPatient)
 
 	r.engine.GET(notesURL, r.getNotes)
+	r.engine.GET(notesByIdURL, r.getNoteById)
 	r.engine.POST(notesByIdUploadURL, r.uploadNote)
 	r.engine.POST(notesURL, r.postNote)
 	r.engine.DELETE(notesByIdURL, r.deleteNote)
