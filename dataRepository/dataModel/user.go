@@ -29,36 +29,37 @@ type UserToken struct {
 
 const UserTableName string = "User"
 
-func (p *User) TableName() string {
+func (e *User) TableName() string {
 	return UserTableName
 }
 
-func (p *User) Init(rows *sql.Rows) error {
+func (e *User) Init(rows *sql.Rows) error {
 	if rows != nil {
-		err := rows.Scan(&p.RowId, &p.Name, &p.LastName, &p.Email, &p.TelephoneNumber, &p.Salt, &p.Password, &p.PubKey)
+		err := rows.Scan(&e.RowId, &e.Name, &e.LastName, &e.Email, &e.TelephoneNumber, &e.Salt, &e.Password, &e.PubKey)
 		return err
 	} else {
 		return nil
 	}
 }
 
-func (p *User) GetName() string {
-	return p.Name
+func (e *User) GetName() string {
+	return e.Name
 }
 
-func (p *User) GetRowId() int64 {
-	return p.RowId
+func (e *User) GetRowId() int64 {
+	return e.RowId
 }
 
-func (p *User) SetRowId(rowId int64) {
-	p.RowId = rowId
+func (e *User) SetRowId(rowId int64) {
+	e.RowId = rowId
 }
 
-func (p *User) Insert() string {
+func (e *User) Insert() string {
 	const INSERT_QRY = "INSERT INTO %s VALUES('%s', '%s', '%s', '%s', '%s', '%s', '%s');"
-	return fmt.Sprintf(INSERT_QRY, p.TableName(), p.Name, p.LastName, p.Email, p.TelephoneNumber, p.Salt, p.Password, p.PubKey)
+	return fmt.Sprintf(INSERT_QRY, e.TableName(), e.Name, e.LastName, e.Email, e.TelephoneNumber, e.Salt, e.Password, e.PubKey)
 }
 
-func (p *User) Update() string {
-	panic("Not Implemented")
+func (e *User) Update() string {
+	const UPDATE_QRY = "UPDATE %s SET name='%s', last_name='%s', email='%s', telephone_number='%s', salt='%s', password='%s' WHERE rowid=%d"
+	return fmt.Sprintf(UPDATE_QRY, e.TableName(), e.Name, e.LastName, e.Email, e.TelephoneNumber, e.Salt, e.Password, e.RowId)
 }

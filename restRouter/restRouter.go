@@ -124,7 +124,7 @@ func deleteObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
 	}
 }
 
-func putObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
+func putObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T, prepare func(t T)) {
 
 	if err := c.BindJSON(t); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": "BAD_REQUEST", "message": "Bad Request : Could not deserialize data : " + err.Error()})
@@ -133,6 +133,9 @@ func putObject[T dbLayer.DbOps](dbHandler *sqlx.DB, c *gin.Context, t T) {
 	id := c.Param("id")
 	rowId, _ := strconv.ParseInt(id, 10, 64)
 	t.SetRowId(rowId)
+	if prepare != nil {
+		prepare(t)
+	}
 
 	dbLayer.Update(dbHandler, t)
 }
@@ -339,7 +342,7 @@ func (r *RestRouter) deletePatient(c *gin.Context) {
 }
 
 func (r *RestRouter) putPatient(c *gin.Context) {
-	putObject(r.dbHandler, c, &dataModel.Patient{})
+	putObject(r.dbHandler, c, &dataModel.Patient{}, nil)
 }
 
 func (r *RestRouter) getNotes(c *gin.Context) {
@@ -385,7 +388,7 @@ func (r *RestRouter) deleteNote(c *gin.Context) {
 }
 
 func (r *RestRouter) putNote(c *gin.Context) {
-	putObject(r.dbHandler, c, &dataModel.Note{})
+	putObject(r.dbHandler, c, &dataModel.Note{}, nil)
 }
 
 func (r *RestRouter) getUsers(c *gin.Context) {
@@ -418,7 +421,11 @@ func (r *RestRouter) deleteUser(c *gin.Context) {
 }
 
 func (r *RestRouter) putUser(c *gin.Context) {
-	putObject(r.dbHandler, c, &dataModel.User{})
+	putObject(r.dbHandler, c, &dataModel.User{}, func(user *dataModel.User) {
+		user.Salt = cred.GenerateSalt()
+		saltedPasswdSha256 := cred.CalcSha256(user.Password, user.Salt)
+		user.Password = saltedPasswdSha256
+	})
 }
 
 func (r *RestRouter) getManifests(c *gin.Context) {
@@ -441,7 +448,7 @@ func (r *RestRouter) deleteManifest(c *gin.Context) {
 }
 
 func (r *RestRouter) putManifest(c *gin.Context) {
-	putObject(r.dbHandler, c, &dataModel.PatientManifest{})
+	putObject(r.dbHandler, c, &dataModel.PatientManifest{}, nil)
 }
 
 func (r *RestRouter) GetEngine() *gin.Engine {
@@ -464,7 +471,7 @@ func (r *RestRouter) Init(dbHandler *sqlx.DB, secret string) *RestRouter {
 		AllowOrigins:     []string{"*"},
 		AllowHeaders:     []string{"Origin", "Token"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowMethods:     []string{"GET", "DELETE", "POST"},
+		AllowMethods:     []string{"GET", "DELETE", "POST", "PUT"},
 		AllowCredentials: true,
 		/* AllowOriginFunc: func(origin string) bool {
 			return origin == "localhost"
